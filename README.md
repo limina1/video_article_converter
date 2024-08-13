@@ -112,6 +112,26 @@ This project is a Python-based tool for analyzing video content, extracting key 
 
   ```
 
+## Troubleshooting
+In the case of an error with the following message:
+```
+qt.qpa.plugin: Could not load the Qt platform plugin "xcb" in "" even though it was found.
+This application failed to start because no Qt platform plugin could be initialized. Reinstalling the application may fix this problem.
+
+Available platform plugins are: eglfs, minimal, minimalegl, offscreen, vnc, xcb.
+
+Aborted (core dumped)
+```
+You can fix it by deleting the following file:
+
+``` sh
+/home/user/.conda/envs/video-analysis/lib/python3.10/site-packages/PyQt5/Qt/plugins/platforms/libqxcb.so
+# or similarly for pip
+/home/user/.local/lib/python3.10/site-packages/PyQt5/Qt/plugins/platforms/libqxcb.so
+```
+See [this issue](https://stackoverflow.com/questions/59809703/could-not-load-the-qt-platform-plugin-xcb-in-even-though-it-was-found) for more information.
+
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
