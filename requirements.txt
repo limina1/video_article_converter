@@ -1,0 +1,10 @@
+numpy
+matplotlib
+opencv-python
+PyQt5
+yt-dlp
+tqdm
+scikit-image
+seaborn
+anthropic
+pysrt
