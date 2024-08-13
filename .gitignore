@@ -1,0 +1,51 @@
+# Ignore everything in the videos folder
+videos/
+
+# Ignore video files
+*.mp4
+*.mkv
+*.webm
+
+# Ignore subtitle files
+*.srt
+
+# Ignore JSON files (for chapters)
+*.json
+
+# Ignore generated content
+*_content.adoc
+
+# Ignore image folders created for AsciiDoc content
+*_images/
+
+# Ignore Python cache files
+__pycache__/
+*.py[cod]
+
+# Ignore virtual environment
+venv/
+env/
+
+# Ignore system-specific files
+.DS_Store
+Thumbs.db
+
+# Ignore API key file
+*.api
+
+# Ignore pickle files
+*.pkl
+
+# Ignore selected frames directories
+selected_frames_*/
+
+# Ignore logs
+*.log
+
+# Ignore temporary files
+*.tmp
+
+# Ignore IDE-specific files
+.vscode/
+.idea/
+*.swp

@@ -453,8 +453,13 @@ def read_subtitle_section(subtitle_file, start_time, end_time):
     for sub in subs:
         sub_time = sub.start.hours * 3600 + sub.start.minutes * 60 + sub.start.seconds
         if start_time <= sub_time <= end_time:
-            section.append(sub.text)
-    return ' '.join(section)
+            # if the subtitle text is already in the section, skip it
+            if sub.text not in section:
+                section.append(sub.text)
+    print(f"Read {len(section)} subtitle lines for section from {start_time} to {end_time}")
+    print("------------------------")
+    print('\n'.join(section))
+    return '\n'.join(section)
 
 def encode_image(image):
     # convert to bw
@@ -465,24 +470,6 @@ def encode_image(image):
         logger.error(f"Error encoding image: {e}")
         return None
 
-def generate_content(chapter_title: str, video_title: str, subtitle_section: str) -> Dict[str, Any]:
-    system_prompt = "You are an expert content creator, skilled at summarizing and rephrasing information into engaging, readable articles. Use AsciiDoc syntax and highlight potential new terms with [[term]]. Each response should be a complete AsciiDoc subsection."
-
-    user_prompt = f"Given chapter titled '{chapter_title}' of downloaded transcript from video titled '{video_title}', and the following section of the transcript:\n\n{subtitle_section}\n\nPlease rephrase what has been verbally spoken into a readable AsciiDoc subsection of a larger corresponding article. Highlight any relevant terminology that could be a new article in brackets like so [[term]]."
-
-    try:
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20240620",
-            max_tokens=2334,
-            temperature=0.2,
-            system=system_prompt,
-            messages=[{"role": "user", "content": [{"type": "text", "text": user_prompt}]}]
-        )
-        return {"content": response.content[0].text, "images": []}
-
-    except anthropic.BadRequestError as e:
-        logger.error(f"Error generating content for chapter '{chapter_title}': {e}")
-        return {"content": f"Error generating content: {str(e)}", "images": []}
 
 def process_results(results, chapters, subtitle_file, video_title):
     generated_content = []
@@ -563,11 +550,6 @@ def save_video_data(video_data, fps, chapters, filename='processed_video_data.pk
     with open(filename, 'wb') as f:
         pickle.dump(data_to_save, f)
     print(f"Video data saved to {filename}")
-import os
-import subprocess
-import json
-import re
-import glob
 
 def sanitize_filename(filename):
     # Remove invalid characters
@@ -736,3 +718,35 @@ def video_download_workflow(url):
     else:
         print("\nFailed to download or locate the video.")
         return None, None, None, None
+def read_prompt_file(filename: str) -> str:
+    with open(filename, 'r') as file:
+        return file.read().strip()
+
+def generate_content(chapter_title: str, video_title: str, subtitle_section: str, max_tokens:int =2334) -> Dict[str, Any]:
+    system_prompt = read_prompt_file('system_prompt.md')
+    user_prompt_template = read_prompt_file('user_prompt.md')
+
+    user_prompt = user_prompt_template.format(
+        chapter_title=chapter_title,
+        video_title=video_title,
+        subtitle_section=subtitle_section
+    )
+
+    client = anthropic.Anthropic()
+
+    try:
+        response = client.messages.create(
+            model="claude-3-5-sonnet-20240620",
+            max_tokens=max_tokens,
+            temperature=0.2,
+            system=system_prompt,
+            messages=[{"role": "user", "content": [{"type": "text", "text": user_prompt}]}]
+        )
+        print("Response received from API:")
+        print(response.content[0].text)
+        print("------------------------")
+        return {"content": response.content[0].text, "images": []}
+
+    except anthropic.BadRequestError as e:
+        logger.error(f"Error generating content for chapter '{chapter_title}': {e}")
+        return {"content": f"Error generating content: {str(e)}", "images": []}
