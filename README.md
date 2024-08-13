@@ -112,7 +112,6 @@ This project is a Python-based tool for analyzing video content, extracting key 
 
   ```
 
-## Troubleshooting
 In the case of an error with the following message:
 ```
 qt.qpa.plugin: Could not load the Qt platform plugin "xcb" in "" even though it was found.
