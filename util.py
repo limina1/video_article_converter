@@ -23,6 +23,7 @@ import os
 import json
 import logging
 import cv2
+import pandas as pd
 from typing import List, Dict, Any, Tuple
 from datetime import datetime
 logging.basicConfig(level=logging.INFO)
@@ -447,19 +448,87 @@ with open('/home/user/.apis/video-articles.api', 'r') as file:
 # Initialize the Anthropic client
 client = anthropic.Anthropic()
 
-def read_subtitle_section(subtitle_file, start_time, end_time):
-    subs = srt_open(subtitle_file)
-    section = []
-    for sub in subs:
-        sub_time = sub.start.hours * 3600 + sub.start.minutes * 60 + sub.start.seconds
-        if start_time <= sub_time <= end_time:
-            # if the subtitle text is already in the section, skip it
-            if sub.text not in section:
-                section.append(sub.text)
-    print(f"Read {len(section)} subtitle lines for section from {start_time} to {end_time}")
-    print("------------------------")
-    print('\n'.join(section))
-    return '\n'.join(section)
+def process_subtitles_by_chapter(tr_file, chapters_file):
+    # Load subtitles into a DataFrame
+    subs = srt_open(tr_file)
+    subs_data = [{'index': sub.index, 'start': sub.start, 'end': sub.end, 'text': sub.text.strip()} for sub in subs]
+    subs_df = pd.DataFrame(subs_data)
+
+    # Convert start and end to seconds for easier processing
+    subs_df['start_seconds'] = subs_df['start'].apply(lambda x: x.hours * 3600 + x.minutes * 60 + x.seconds + x.milliseconds / 1000)
+    subs_df['end_seconds'] = subs_df['end'].apply(lambda x: x.hours * 3600 + x.minutes * 60 + x.seconds + x.milliseconds / 1000)
+
+    # Remove empty subtitles
+    subs_df = subs_df[subs_df['text'] != '']
+
+    # Sort by start time
+    subs_df = subs_df.sort_values('start_seconds')
+
+    # Load chapters
+    with open(chapters_file, 'r') as f:
+        chapters = json.load(f)
+
+    # Function to merge overlapping subtitles
+    def merge_overlapping(group):
+        merged_text = group.iloc[0]['text']
+        for _, row in group.iloc[1:].iterrows():
+            words1 = set(merged_text.split())
+            words2 = set(row['text'].split())
+
+            # Check if either set of words is empty
+            if not words1 or not words2:
+                merged_text += ' ' + row['text']
+            else:
+                intersection = words1.intersection(words2)
+                overlap_ratio = len(intersection) / min(len(words1), len(words2))
+
+                if overlap_ratio > 0.5:
+                    new_words = [w for w in row['text'].split() if w not in intersection]
+                    merged_text += ' ' + ' '.join(new_words)
+                else:
+                    merged_text += ' ' + row['text']
+
+        return pd.Series({
+            'start': group.iloc[0]['start'],
+            'end': group.iloc[-1]['end'],
+            'text': merged_text.strip(),
+            'start_seconds': group.iloc[0]['start_seconds'],
+            'end_seconds': group.iloc[-1]['end_seconds']
+        })
+
+    processed_chapters = {}
+
+    for i, chapter in enumerate(chapters):
+        chapter_start = chapter['start_time']
+        chapter_end = chapters[i+1]['start_time'] if i+1 < len(chapters) else float('inf')
+
+        # Filter subtitles for this chapter
+        chapter_subs = subs_df[
+            (subs_df['start_seconds'] >= chapter_start) &
+            (subs_df['start_seconds'] < chapter_end)
+        ]
+
+        # Skip processing if there are no subtitles in this chapter
+        if chapter_subs.empty:
+            processed_chapters[chapter['title']] = pd.DataFrame(columns=subs_df.columns)
+            continue
+
+        # Group overlapping subtitles and apply the merging function
+        merged_df = chapter_subs.groupby((chapter_subs['start_seconds'] > chapter_subs['end_seconds'].shift()).cumsum()).apply(merge_overlapping)
+
+        # Store processed subtitles for this chapter
+        processed_chapters[chapter['title']] = merged_df
+
+    return processed_chapters
+
+def read_subtitle_section(processed_chapters, chapter_title):
+    if chapter_title in processed_chapters:
+        chapter_subs = processed_chapters[chapter_title]
+        if chapter_subs.empty:
+            return f"No subtitles found for chapter: {chapter_title}"
+        return ' '.join(chapter_subs['text'])
+    else:
+        return f"Chapter not found: {chapter_title}"
 
 def encode_image(image):
     # convert to bw
@@ -690,7 +759,7 @@ def video_download_workflow(url):
         print(f"\nVideo file already exists: {video_file}")
         while True:
             redownload = input("Do you want to redownload at a different resolution? (yes/no): ").lower()
-            if redownload in ['yes', 'no']:
+            if redownload in ['yes', 'no', ' ']:
                 break
             print("Please enter 'yes' or 'no'.")
 
@@ -742,6 +811,9 @@ def generate_content(chapter_title: str, video_title: str, subtitle_section: str
             system=system_prompt,
             messages=[{"role": "user", "content": [{"type": "text", "text": user_prompt}]}]
         )
+        print('sent subtitle section to API')
+        print(subtitle_section)
+        print("------------------------")
         print("Response received from API:")
         print(response.content[0].text)
         print("------------------------")
