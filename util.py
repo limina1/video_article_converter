@@ -792,8 +792,12 @@ def read_prompt_file(filename: str) -> str:
         return file.read().strip()
 
 def generate_content(chapter_title: str, video_title: str, subtitle_section: str, max_tokens:int =2334) -> Dict[str, Any]:
-    system_prompt = read_prompt_file('system_prompt.md')
+    system_prompt_template = read_prompt_file('system_prompt.md')
     user_prompt_template = read_prompt_file('user_prompt.md')
+    system_prompt= system_prompt_template.format(
+        videotype= 'video lecture',
+        videofeatures= 'there may be diagrams, slides, or other visual aids which you may not have access to',
+    )
 
     user_prompt = user_prompt_template.format(
         chapter_title=chapter_title,

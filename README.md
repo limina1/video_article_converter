@@ -67,8 +67,11 @@ This project is a Python-based tool for analyzing video content, extracting key 
    ```
 
    python video_analysis.py
+   # or for a transcript
+   python transcript_analysis.py
 
    ```
+
 
 2. When prompted, enter the YouTube URL of the video you want to analyze.
 

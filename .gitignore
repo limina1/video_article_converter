@@ -1,5 +1,6 @@
 # Ignore everything in the videos folder
 videos/
+transcripts/
 
 # Ignore video files
 *.mp4
