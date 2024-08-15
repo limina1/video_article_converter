@@ -26,6 +26,7 @@ import cv2
 import pandas as pd
 from typing import List, Dict, Any, Tuple
 from datetime import datetime
+import sys
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 import pickle
@@ -631,13 +632,12 @@ def sanitize_filename(filename):
 
 def check_video_exists(url):
     print(f"Checking video for URL: {url}")
-
     # Get video title
     title_command = ["yt-dlp", "--get-title", url]
     title_result = subprocess.run(title_command, capture_output=True, text=True)
     if title_result.returncode != 0:
         print(f"Error getting video title: {title_result.stderr}")
-        return None, None, None, []
+        sys.exit(1)
 
     video_title = title_result.stdout.strip()
     sanitized_title = sanitize_filename(video_title)
@@ -689,6 +689,7 @@ def check_video_exists(url):
             print(f"Detected current resolution: {current_resolution}")
         else:
             print(f"Error getting video resolution: {ffprobe_result.stderr}")
+            sys.exit(1)
 
     # Get available resolutions
     format_command = ["yt-dlp", "-F", url]
@@ -779,14 +780,14 @@ def video_download_workflow(url):
             video_file, chapters_file, subtitle_file = download_video(url, resolution, video_folder, sanitized_title)
         else:
             print("Download cancelled.")
-            return None, None, None
+            sys.exit(1)
 
     if video_file:
         print("\nVideo processing complete.")
         return video_file, chapters_file, subtitle_file, video_folder
     else:
         print("\nFailed to download or locate the video.")
-        return None, None, None, None
+        sys.exit(1)
 def read_prompt_file(filename: str) -> str:
     with open(filename, 'r') as file:
         return file.read().strip()

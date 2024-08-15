@@ -3,7 +3,7 @@ import numpy as np
 import pickle
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QDialog, QGridLayout, QLabel, QScrollArea
+from PyQt5.QtWidgets import QDialog, QGridLayout, QLabel, QScrollArea, QLineEdit
 from PyQt5.QtGui import QPixmap, QImage
 from PyQt5.QtCore import Qt, pyqtSignal
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas, NavigationToolbar2QT as NavigationToolbar
@@ -118,6 +118,7 @@ class EntropyPlotWidget(QWidget):
                              facecolor='red', alpha=0.3)
             self.ax.add_patch(rect)
         self.canvas.draw()
+
 class MainWindow(QMainWindow):
     def __init__(self, video_data, fps, chapters, video_folder):
         super().__init__()
@@ -137,89 +138,15 @@ class MainWindow(QMainWindow):
         self.entropy_plot = EntropyPlotWidget(self.video_data, self.fps, self.chapters)
         layout.addWidget(self.entropy_plot)
 
+        self.num_frames_input = QLineEdit()
+        self.num_frames_input.setPlaceholderText("Enter number of frames per selection")
+        layout.addWidget(self.num_frames_input)
+
         select_button = QPushButton('Select Frames')
         select_button.clicked.connect(self.on_select_frames)
         layout.addWidget(select_button)
 
         self.setCentralWidget(central_widget)
-    # def on_select_frames(self):
-        selections = self.entropy_plot.selections
-        if not selections:
-            print("No selections made. Please select ranges in the entropy plot first.")
-            return
-        frame_selection_window = FrameSelectionWindow(self.video_data, selections, self.fps, self)
-        if frame_selection_window.exec_() == QDialog.Accepted:
-            selected_frames = frame_selection_window.get_selected_frames()
-            self.save_selected_frames(selected_frames)#
-
-    # def on_select_frames(self):
-        selections = self.entropy_plot.selections
-        if not selections:
-            print("No selections made. Please select ranges in the entropy plot first.")
-            return
-        frame_selection_window = FrameSelectionWindow(self.video_data, selections, self.fps, self, frame_interval=5)
-        if frame_selection_window.exec_() == QDialog.Accepted:
-            selected_frames = frame_selection_window.get_selected_frames()
-            self.save_selected_frames(selected_frames)#
-    def on_select_frames(self):
-        selections = self.entropy_plot.selections
-        if not selections:
-            print("No selections made. Please select ranges in the entropy plot first.")
-            return
-        frame_selection_window = FrameSelectionWindow(self.video_data, selections, self.fps, self, num_frames=5)
-        if frame_selection_window.exec_() == QDialog.Accepted:
-            selected_frames = frame_selection_window.get_selected_frames()
-            self.save_selected_frames(selected_frames)
-    def save_selected_frames(self, selected_frames):
-        # Use the video folder path from the video download process
-        video_folder = self.video_folder  # Assume this is set during video download
-
-        # Create a subdirectory for selected frames
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        save_dir = os.path.join(video_folder, f"selected_frames_{timestamp}")
-        os.makedirs(save_dir, exist_ok=True)
-
-        # Prepare metadata
-        metadata = []
-
-        for identifier, pixmap in selected_frames.items():
-            selection_index, frame_index = map(int, identifier.split(','))
-
-            # Find the correct chapter and frame
-            frame_found = False
-            for chapter in self.video_data:
-                if frame_index < len(chapter['frames']):
-                    frame = chapter['frames'][frame_index]
-                    frame_timestamp = chapter['timestamps'][frame_index]
-                    frame_found = True
-                    break
-                frame_index -= len(chapter['frames'])
-
-            if not frame_found:
-                print(f"Warning: Could not find frame for identifier {identifier}")
-                continue
-
-            # Save the frame as an image
-            frame_filename = f"frame_{selection_index}_{frame_index}.png"
-            frame_path = os.path.join(save_dir, frame_filename)
-            cv2.imwrite(frame_path, cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
-
-            # Add metadata
-            metadata.append({
-                "chapter_title": chapter['title'],
-                "timestamp": frame_timestamp,
-                "filename": frame_filename
-            })
-
-        # Save metadata
-        metadata_file = os.path.join(save_dir, "metadata.json")
-        with open(metadata_file, 'w') as f:
-            json.dump(metadata, f, indent=2)
-
-        print(f"Selected frames and metadata saved in {save_dir}")
-
-        # Update the interactive entropy plot (if needed)
-        self.update_entropy_plot_with_selections(metadata)
 
     def update_entropy_plot_with_selections(self, metadata):
         # Clear previous selections
@@ -233,13 +160,136 @@ class MainWindow(QMainWindow):
             self.entropy_plot.ax.axvline(x=timestamp, color='g', linestyle='--', alpha=0.7)
 
         self.entropy_plot.canvas.draw()
+    def save_selected_frames(self, selected_frames):
+        # Use the video folder path from the video download process
+        video_folder = self.video_folder  # Assume this is set during video download
+
+        # Create a subdirectory for selected frames
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        save_dir = os.path.join(video_folder, f"selected_frames_{timestamp}")
+        os.makedirs(save_dir, exist_ok=True)
+
+        # Prepare metadata
+        metadata = []
+
+        for identifier, pixmap in selected_frames.items():
+            # Split the identifier
+            id_type, id_value = identifier[0], identifier[1:]
+
+            if id_type == 's':  # Selection-based identifier
+                selection_index, timestamp = id_value.split(',')
+                selection_index = int(selection_index)
+                timestamp = float(timestamp)
+
+                # Find the correct chapter and frame
+                frame_found = False
+                for chapter in self.video_data:
+                    for i, (frame, frame_timestamp) in enumerate(zip(chapter['frames'], chapter['timestamps'])):
+                        if abs(frame_timestamp - timestamp) < 1e-6:  # Compare with small tolerance
+                            frame_found = True
+                            break
+                    if frame_found:
+                        break
+
+                if not frame_found:
+                    print(f"Warning: Could not find frame for identifier {identifier}")
+                    continue
+
+                chapter_title = chapter['title']
+
+            elif id_type == 'c':  # Chapter-based identifier
+                chapter_index, timestamp = id_value.split(',')
+                chapter_index = int(chapter_index)
+                timestamp = float(timestamp)
+
+                chapter = self.video_data[chapter_index]
+                chapter_title = self.chapters[chapter_index]['title']
+
+                # Find the correct frame in the chapter
+                frame_found = False
+                for i, (frame, frame_timestamp) in enumerate(zip(chapter['frames'], chapter['timestamps'])):
+                    if abs(frame_timestamp - timestamp) < 1e-6:  # Compare with small tolerance
+                        frame_found = True
+                        break
+
+                if not frame_found:
+                    print(f"Warning: Could not find frame for identifier {identifier}")
+                    continue
+
+            else:
+                print(f"Warning: Unknown identifier type {id_type}")
+                continue
+
+            # Save the frame as an image
+            frame_filename = f"frame_{chapter_title}_{timestamp:.2f}.png"
+            frame_path = os.path.join(save_dir, frame_filename)
+            cv2.imwrite(frame_path, cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
+
+            # Add metadata
+            metadata.append({
+                "chapter_title": chapter_title,
+                "timestamp": timestamp,
+                "filename": frame_filename
+            })
+
+        # Save metadata
+        metadata_file = os.path.join(save_dir, "metadata.json")
+        with open(metadata_file, 'w') as f:
+            json.dump(metadata, f, indent=2)
+
+        print(f"Selected frames and metadata saved in {save_dir}")
+
+        # Update the interactive entropy plot (if needed)
+        self.update_entropy_plot_with_selections(metadata)
+    def on_select_frames(self):
+        try:
+            num_frames = int(self.num_frames_input.text())
+        except ValueError:
+            print("Invalid number of frames. Using default value of 5.")
+            num_frames = 5
+
+        selections = self.entropy_plot.selections if hasattr(self.entropy_plot, 'selections') else []
+
+        frame_selection_window = FrameSelectionWindow(
+            self.video_data,
+            self.chapters,
+            self.fps,
+            selections=selections,
+            parent=self,
+            num_frames=num_frames
+        )
+
+        if frame_selection_window.exec_() == QDialog.Accepted:
+            selected_frames = frame_selection_window.get_selected_frames()
+            if selected_frames:
+                self.save_selected_frames(selected_frames)
+            else:
+                print("No frames were selected.")
+    def select_frames_per_chapter(self, num_frames):
+        selected_frames = {}
+        for chapter_index, chapter in enumerate(self.video_data):
+            frames = chapter['frames']
+            timestamps = chapter['timestamps']
+            indices = [int(i * len(frames) / num_frames) for i in range(num_frames)]
+            for i, idx in enumerate(indices):
+                frame = frames[idx]
+                timestamp = timestamps[idx]
+                height, width, channel = frame.shape
+                bytes_per_line = 3 * width
+                q_img = QImage(frame.data, width, height, bytes_per_line, QImage.Format_RGB888)
+                pixmap = QPixmap.fromImage(q_img)
+                pixmap = pixmap.scaled(100, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                identifier = f"{chapter_index},{idx}"
+                selected_frames[identifier] = pixmap
+        return selected_frames
 
 class FrameSelectionWindow(QDialog):
-    def __init__(self, video_data, selections, fps, parent=None, num_frames=5):
+    def __init__(self, video_data, chapters, fps, selections=None, parent=None, num_frames=5):
         super().__init__(parent)
         self.video_data = video_data
-        self.selections = selections
+        self.chapters = chapters
         self.fps = fps
+        self.selections = selections if selections else []
         self.num_frames = num_frames
         self.selected_frames = {}
         self.init_ui()
@@ -254,15 +304,10 @@ class FrameSelectionWindow(QDialog):
         scroll_widget = QWidget()
         scroll_layout = QGridLayout(scroll_widget)
 
-        for i, (start, end) in enumerate(self.selections):
-            row_label = QLabel(f"Selection {i+1}: {start:.2f}s - {end:.2f}s")
-            scroll_layout.addWidget(row_label, i, 0)
-
-            frames = self.get_frames_for_selection(start, end)
-            for j, (frame, identifier) in enumerate(frames):
-                frame_label = ClickableLabel(frame, identifier)
-                frame_label.clicked.connect(self.toggle_frame)
-                scroll_layout.addWidget(frame_label, i, j+1)
+        if self.selections:
+            self.init_selection_based_ui(scroll_layout)
+        else:
+            self.init_chapter_based_ui(scroll_layout)
 
         scroll_widget.setLayout(scroll_layout)
         scroll_area.setWidget(scroll_widget)
@@ -274,20 +319,27 @@ class FrameSelectionWindow(QDialog):
 
         self.setLayout(main_layout)
 
-    def save_frames(self):
-        self.accept()
+    def init_selection_based_ui(self, layout):
+        for i, (start, end) in enumerate(self.selections):
+            row_label = QLabel(f"Selection {i+1}: {start:.2f}s - {end:.2f}s")
+            layout.addWidget(row_label, i, 0)
 
-    def toggle_frame(self, identifier):
-        sender = self.sender()
-        if identifier in self.selected_frames:
-            del self.selected_frames[identifier]
-            sender.setStyleSheet("")
-        else:
-            self.selected_frames[identifier] = sender.pixmap()
-            sender.setStyleSheet("border: 3px solid red;")
+            frames = self.get_frames_for_selection(start, end)
+            for j, (frame, identifier) in enumerate(frames):
+                frame_label = ClickableLabel(frame, identifier)
+                frame_label.clicked.connect(self.toggle_frame)
+                layout.addWidget(frame_label, i, j+1)
 
-    def get_selected_frames(self):
-        return self.selected_frames
+    def init_chapter_based_ui(self, layout):
+        for i, chapter in enumerate(self.chapters):
+            row_label = QLabel(f"Chapter {i+1}: {chapter['title']}")
+            layout.addWidget(row_label, i, 0)
+
+            frames = self.get_frames_for_chapter(i)
+            for j, (frame, identifier) in enumerate(frames):
+                frame_label = ClickableLabel(frame, identifier)
+                frame_label.clicked.connect(self.toggle_frame)
+                layout.addWidget(frame_label, i, j+1)
 
     def get_frames_for_selection(self, start, end):
         frames = []
@@ -301,7 +353,6 @@ class FrameSelectionWindow(QDialog):
                 if start <= timestamp <= end:
                     selection_frames.append((frame, timestamp))
 
-        # Divide the selection into num_frames parts and pick the first frame from each part
         total_frames = len(selection_frames)
         if total_frames == 0:
             return frames
@@ -315,10 +366,45 @@ class FrameSelectionWindow(QDialog):
             q_img = QImage(frame.data, width, height, bytes_per_line, QImage.Format_RGB888)
             pixmap = QPixmap.fromImage(q_img)
             pixmap = pixmap.scaled(100, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            frames.append((pixmap, f"{i},{idx}"))
+            frames.append((pixmap, f"s{i},{timestamp}"))
 
         return frames
 
+    def get_frames_for_chapter(self, chapter_index):
+        frames = []
+        chapter_data = self.video_data[chapter_index]
+        chapter_frames = chapter_data['frames']
+        chapter_timestamps = chapter_data['timestamps']
+
+        total_frames = len(chapter_frames)
+        indices = [int(i * total_frames / self.num_frames) for i in range(self.num_frames)]
+
+        for i, idx in enumerate(indices):
+            frame = chapter_frames[idx]
+            timestamp = chapter_timestamps[idx]
+            height, width, channel = frame.shape
+            bytes_per_line = 3 * width
+            q_img = QImage(frame.data, width, height, bytes_per_line, QImage.Format_RGB888)
+            pixmap = QPixmap.fromImage(q_img)
+            pixmap = pixmap.scaled(100, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            frames.append((pixmap, f"c{chapter_index},{timestamp}"))
+
+        return frames
+
+    def toggle_frame(self, identifier):
+        sender = self.sender()
+        if identifier in self.selected_frames:
+            del self.selected_frames[identifier]
+            sender.setStyleSheet("")
+        else:
+            self.selected_frames[identifier] = sender.pixmap()
+            sender.setStyleSheet("border: 3px solid red;")
+
+    def save_frames(self):
+        self.accept()
+
+    def get_selected_frames(self):
+        return self.selected_frames
 class ClickableLabel(QLabel):
     clicked = pyqtSignal(str)
     def __init__(self, pixmap, identifier, timestamp=None):
