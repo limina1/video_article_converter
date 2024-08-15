@@ -3,7 +3,7 @@ import numpy as np
 import pickle
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QDialog, QGridLayout, QLabel, QScrollArea, QLineEdit
+from PyQt5.QtWidgets import QDialog, QGridLayout, QLabel, QScrollArea, QLineEdit, QHBoxLayout
 from PyQt5.QtGui import QPixmap, QImage
 from PyQt5.QtCore import Qt, pyqtSignal
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas, NavigationToolbar2QT as NavigationToolbar
@@ -14,6 +14,8 @@ import cv2
 import json
 import os
 from datetime import datetime
+
+image_scale = 200
 def load_video_data(filename='processed_video_data.pkl'):
     with open(filename, 'rb') as f:
         data = pickle.load(f)
@@ -127,7 +129,6 @@ class MainWindow(QMainWindow):
         self.chapters = chapters
         self.video_folder = video_folder
         self.init_ui()
-
     def init_ui(self):
         self.setWindowTitle('Video Entropy Analysis')
         self.setGeometry(100, 100, 800, 600)
@@ -138,15 +139,52 @@ class MainWindow(QMainWindow):
         self.entropy_plot = EntropyPlotWidget(self.video_data, self.fps, self.chapters)
         layout.addWidget(self.entropy_plot)
 
+        # Create a horizontal layout for the num_frames input and label
+        num_frames_layout = QHBoxLayout()
+
+        # Add a label for the num_frames input
+        num_frames_label = QLabel("Frames per chapter:")
+        num_frames_layout.addWidget(num_frames_label)
+
+        # Create the num_frames input with a default value
         self.num_frames_input = QLineEdit()
-        self.num_frames_input.setPlaceholderText("Enter number of frames per selection")
-        layout.addWidget(self.num_frames_input)
+        self.num_frames_input.setPlaceholderText("Enter number (default: 5)")
+        self.num_frames_input.setToolTip("Enter the number of frames to select per chapter")
+        num_frames_layout.addWidget(self.num_frames_input)
+
+        # Add the num_frames layout to the main layout
+        layout.addLayout(num_frames_layout)
 
         select_button = QPushButton('Select Frames')
         select_button.clicked.connect(self.on_select_frames)
         layout.addWidget(select_button)
 
         self.setCentralWidget(central_widget)
+
+    def on_select_frames(self):
+        try:
+            num_frames = int(self.num_frames_input.text())
+        except ValueError:
+            num_frames = 5  # Default value
+            print(f"Invalid input. Using default value of {num_frames} frames per chapter.")
+
+        selections = self.entropy_plot.selections if hasattr(self.entropy_plot, 'selections') else []
+
+        frame_selection_window = FrameSelectionWindow(
+            self.video_data,
+            self.chapters,
+            self.fps,
+            selections=selections,
+            parent=self,
+            num_frames=num_frames
+        )
+
+        if frame_selection_window.exec_() == QDialog.Accepted:
+            selected_frames = frame_selection_window.get_selected_frames()
+            if selected_frames:
+                self.save_selected_frames(selected_frames)
+            else:
+                print("No frames were selected.")
 
     def update_entropy_plot_with_selections(self, metadata):
         # Clear previous selections
@@ -241,31 +279,8 @@ class MainWindow(QMainWindow):
 
         # Update the interactive entropy plot (if needed)
         self.update_entropy_plot_with_selections(metadata)
-    def on_select_frames(self):
-        try:
-            num_frames = int(self.num_frames_input.text())
-        except ValueError:
-            print("Invalid number of frames. Using default value of 5.")
-            num_frames = 5
-
-        selections = self.entropy_plot.selections if hasattr(self.entropy_plot, 'selections') else []
-
-        frame_selection_window = FrameSelectionWindow(
-            self.video_data,
-            self.chapters,
-            self.fps,
-            selections=selections,
-            parent=self,
-            num_frames=num_frames
-        )
-
-        if frame_selection_window.exec_() == QDialog.Accepted:
-            selected_frames = frame_selection_window.get_selected_frames()
-            if selected_frames:
-                self.save_selected_frames(selected_frames)
-            else:
-                print("No frames were selected.")
     def select_frames_per_chapter(self, num_frames):
+        global image_scale
         selected_frames = {}
         for chapter_index, chapter in enumerate(self.video_data):
             frames = chapter['frames']
@@ -278,7 +293,7 @@ class MainWindow(QMainWindow):
                 bytes_per_line = 3 * width
                 q_img = QImage(frame.data, width, height, bytes_per_line, QImage.Format_RGB888)
                 pixmap = QPixmap.fromImage(q_img)
-                pixmap = pixmap.scaled(100, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                pixmap = pixmap.scaled(image_scale, image_scale, Qt.KeepAspectRatio, Qt.SmoothTransformation)
                 identifier = f"{chapter_index},{idx}"
                 selected_frames[identifier] = pixmap
         return selected_frames
@@ -342,6 +357,7 @@ class FrameSelectionWindow(QDialog):
                 layout.addWidget(frame_label, i, j+1)
 
     def get_frames_for_selection(self, start, end):
+        global image_scale
         frames = []
         selection_frames = []
 
@@ -365,12 +381,13 @@ class FrameSelectionWindow(QDialog):
             bytes_per_line = 3 * width
             q_img = QImage(frame.data, width, height, bytes_per_line, QImage.Format_RGB888)
             pixmap = QPixmap.fromImage(q_img)
-            pixmap = pixmap.scaled(100, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            pixmap = pixmap.scaled(image_scale, image_scale, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             frames.append((pixmap, f"s{i},{timestamp}"))
 
         return frames
 
     def get_frames_for_chapter(self, chapter_index):
+        global image_scale
         frames = []
         chapter_data = self.video_data[chapter_index]
         chapter_frames = chapter_data['frames']
@@ -386,7 +403,7 @@ class FrameSelectionWindow(QDialog):
             bytes_per_line = 3 * width
             q_img = QImage(frame.data, width, height, bytes_per_line, QImage.Format_RGB888)
             pixmap = QPixmap.fromImage(q_img)
-            pixmap = pixmap.scaled(100, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            pixmap = pixmap.scaled(image_scale, image_scale, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             frames.append((pixmap, f"c{chapter_index},{timestamp}"))
 
         return frames
