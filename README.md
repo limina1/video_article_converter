@@ -14,6 +14,8 @@ This project is a Python-based tool for analyzing video content, extracting key 
 
 - Content generation based on selected frames and video context
 
+- work only with transcripts for audio based videos
+
 ## Prerequisites
 
 - Python 3.7+
@@ -77,9 +79,13 @@ This project is a Python-based tool for analyzing video content, extracting key 
 
 3. Choose the desired video quality for download.
 
-4. The tool will download the video, extract chapters and subtitles, and analyze the video entropy. Moments where the entropy signal is stable is a strong indicator that a significant event (like a diagram) is being shown. You can pull up the video in a video player to verify this.
+4. The tool will download the video, extract chapters and subtitles, and analyze the video entropy.
 
-5. Use the interactive GUI to select key frames based on the entropy plot.
+5. Use the interactive GUI to analyze the video:
+   - The entropy plot will be displayed, showing entropy over time for each chapter.
+   - You can make selections on the entropy plot to focus on specific parts of the video.
+   - Enter the number of frames you want to select per chapter or selection (default is 5).
+   Rule of thumb: High entropy, and also where the entropy signal is less stable (goes up and down) likely indicates there is more movement, or that the frame is not a diagram, a low and stable entropy signal likely means that there is a diagram being shown. You can validate this by opening up the video in your favorite video player.
 
 6. The tool will generate content based on the selected frames and video context.
 
