@@ -1,7 +1,7 @@
 # Video Analysis and Content Generation Tool
-You can see a produced video -> transformation [here](https://next-alexandria.gitcitadel.eu/publication?d=nostr-apps-101)
+You can see a produced video -> transformation on our nostr client [Alexandria](https://next-alexandria.gitcitadel.eu/publication?d=nostr-apps-101)
 
-An in depth explaination of the tool's usage on [https://habla.news/u/liminal@gitcitadel.com/1729213258345](habla.news)
+An in depth explaination of the tool's usage on [habla.news](https://habla.news/u/liminal@gitcitadel.com/1729213258345)
 This project is a Python-based tool for analyzing video content, extracting key frames, and generating summary content. It uses video entropy analysis to identify significant moments in the video and provides a graphical user interface for frame selection and content generation.
 
 ## Features
